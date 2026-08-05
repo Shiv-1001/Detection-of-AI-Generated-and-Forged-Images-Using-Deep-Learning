@@ -1,5 +1,5 @@
 ---
-title: DocForensics
+title: Detection of Ai generated and Foreged images
 emoji: 🔍
 colorFrom: indigo
 colorTo: purple
@@ -8,7 +8,7 @@ app_port: 7860
 pinned: false
 ---
 
-# 🔍 DocForensics — Document Tampering & Forgery Detector
+# 🔍 Detection of Ai generated and Foreged images
 
 A computer-vision system that inspects documents and images for signs of
 manipulation. It combines **seven classical forensic detectors** with a
@@ -148,9 +148,9 @@ frontend/backend hosting.
 
 ## Author
 
-**Developed by Surya Karthik**
+**Developed by Shiv Narayan Sahu, Ashrita Mohapatra,Sankalp Mohanty,Pinaki Prasad**
 
-- 💼 LinkedIn: [linkedin.com/in/surya-karthik-](https://www.linkedin.com/in/surya-karthik-)
-- 📧 Get in touch: [g.suryakarthik@gmail.com](mailto:g.suryakarthik@gmail.com)
+- 💼 LinkedIn: https://linkedin.com/in/shiv-narayan-sahu-00b655319
+- 📧 Get in touch: shivnarayansahu6205290743@gmail.com
 
 Feedback and contributions are welcome — feel free to open an issue or reach out.
