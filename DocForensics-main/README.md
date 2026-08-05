@@ -141,8 +141,6 @@ frontend/backend hosting.
 - Copy-move and double-JPEG are weak on text-heavy documents (legitimate
   repetition mimics tampering), so they're low-weight hints; the CNN carries the
   verdict.
-- The first request downloads a ~350 MB AI-detector model, then caches it.
-  Set `DOCFORENSICS_DISABLE_AI_MODEL=1` to skip it on memory-constrained hosts.
 
 ---
 
