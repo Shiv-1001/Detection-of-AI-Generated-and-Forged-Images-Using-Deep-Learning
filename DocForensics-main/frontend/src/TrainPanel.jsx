@@ -61,7 +61,8 @@ export default function TrainPanel() {
   }
 
   const busy = status?.status === 'running'
-  const canTrain = status && status.dataset.genuine > 0 && status.dataset.tampered > 0
+  const canTrain = status && status.dataset.ai_generated > 0 &&
+    status.dataset.forged > 0 && status.dataset.original > 0
   const pct = status && status.total_epochs
     ? Math.round((status.current_epoch / status.total_epochs) * 100) : 0
 
@@ -70,8 +71,8 @@ export default function TrainPanel() {
       <div className="train-head">
         <h2>Train the model</h2>
         <p>
-          Dataset -&gt; Original / Forged split -&gt; TamperNet (RGB + SRM noise
-          streams, U-Net decoder, classification head) -&gt; <code>checkpoints/best.pt</code>.
+          Dataset -&gt; Original / AI-generated / Forged classes -&gt; TamperNet
+          (RGB + SRM noise streams, U-Net decoder, classification head) -&gt; <code>checkpoints/best.pt</code>.
         </p>
       </div>
 
@@ -81,12 +82,16 @@ export default function TrainPanel() {
         <>
           <div className="train-stats">
             <div className="stat">
-              <span className="stat-num">{status.dataset.genuine}</span>
-              <span className="stat-cap">Original (genuine)</span>
+              <span className="stat-num">{status.dataset.original}</span>
+              <span className="stat-cap">Original</span>
             </div>
             <div className="stat">
-              <span className="stat-num">{status.dataset.tampered}</span>
-              <span className="stat-cap">Forged (tampered)</span>
+              <span className="stat-num">{status.dataset.ai_generated}</span>
+              <span className="stat-cap">AI-generated</span>
+            </div>
+            <div className="stat">
+              <span className="stat-num">{status.dataset.forged}</span>
+              <span className="stat-cap">Forged</span>
             </div>
             <div className="stat">
               <span className={`stat-num status-${STATUS_TONE[status.status]}`}>
@@ -106,7 +111,7 @@ export default function TrainPanel() {
             </button>
             {!canTrain && (
               <span className="train-hint">
-                Add images to <code>data/genuine/</code> and <code>data/tampered/</code> first.
+                Add images to <code>data/original/</code>, <code>data/aigenerated/</code>, and <code>data/forged/</code> first.
               </span>
             )}
           </div>

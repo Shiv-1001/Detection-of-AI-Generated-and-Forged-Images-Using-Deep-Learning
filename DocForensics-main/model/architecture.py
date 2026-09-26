@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from core.config import NUM_CLASSES
+
 
 def srm_filter(x: torch.Tensor) -> torch.Tensor:
     """Apply fixed high-pass filters to expose noise residuals."""
@@ -67,7 +69,7 @@ class TamperNet(nn.Module):
         self.cls_head  = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
-            nn.Linear(base_ch * 8, 1),
+            nn.Linear(base_ch * 8, NUM_CLASSES),
         )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

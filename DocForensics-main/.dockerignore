@@ -5,8 +5,9 @@ venv/
 .git/
 .gitignore
 tests/
-data/genuine/
-data/tampered/
+data/aigenerated/
+data/forged/
+data/original/
 data/masks/
 test.jpg
 frontend/node_modules/

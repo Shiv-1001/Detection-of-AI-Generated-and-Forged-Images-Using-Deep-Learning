@@ -3,8 +3,11 @@ from pathlib import Path
 BASE_DIR        = Path(__file__).resolve().parent.parent
 
 DATA_DIR        = BASE_DIR / "data"
-GENUINE_DIR     = DATA_DIR / "genuine"
-TAMPERED_DIR    = DATA_DIR / "tampered"
+AI_GENERATED_DIR = DATA_DIR / "aigenerated"
+FORGED_DIR       = DATA_DIR / "forged"
+ORIGINAL_DIR     = DATA_DIR / "original"
+GENUINE_DIR      = ORIGINAL_DIR
+TAMPERED_DIR     = FORGED_DIR
 MASKS_DIR       = DATA_DIR / "masks"
 CHECKPOINTS_DIR = BASE_DIR / "model" / "checkpoints"
 
@@ -44,7 +47,8 @@ FUSION_WEIGHTS = {
 TAMPER_THRESHOLD = 0.45
 
 MODEL_INPUT_SIZE    = 128
+NUM_CLASSES         = 3
 BATCH_SIZE          = 4
 LEARNING_RATE       = 1e-4
-MAX_EPOCHS          = 40
+MAX_EPOCHS          = 5
 EARLY_STOP_PATIENCE = 6

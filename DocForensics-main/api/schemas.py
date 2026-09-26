@@ -19,8 +19,9 @@ class AnalyzeResponse(BaseModel):
 
 
 class DatasetCounts(BaseModel):
-    genuine: int
-    tampered: int
+    ai_generated: int
+    forged: int
+    original: int
 
 
 class TrainStartResponse(BaseModel):

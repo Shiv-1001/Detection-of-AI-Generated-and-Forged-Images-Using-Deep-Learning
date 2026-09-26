@@ -1,4 +1,4 @@
-import cv2
+﻿import cv2
 import numpy as np
 
 from core.config import FUSION_WEIGHTS, TAMPER_THRESHOLD
@@ -29,7 +29,7 @@ def build_evidence(detections: list[Detection]) -> list[str]:
     return messages or ['No significant tampering signals detected']
 
 
-def three_way_breakdown(scores: dict, w: dict) -> dict:
+def three_way_breakdown(scores: dict, w: dict, model_ai_prob: float | None = None) -> dict:
     """Score the workflow's two-stage decision tree:
 
         Image -> Pre-process -> Model input
@@ -38,17 +38,23 @@ def three_way_breakdown(scores: dict, w: dict) -> dict:
 
     Returns an ordered dict (Original, AI Generated, Forged) that sums to ~1.0,
     used to drive the UI's three-way result breakdown.
-    """
-    ai_score = float(np.clip(scores.get('ai_generated', 0.0), 0, 1))
 
-    # Stage 2 signal: forensic/tamper evidence, EXCLUDING the ai_generated
-    # detector (that belongs to stage 1), renormalized over the weights used.
+    model_ai_prob: the trained TamperNet's own P(ai-generated), when a
+    checkpoint is available. This is weighted heavily over the ai_generated
+    detector's fallback heuristics (frequency/EXIF), since those run WITHOUT
+    their real classifier by default and are much weaker signals.
+    """
+    heuristic_ai_score = float(np.clip(scores.get('ai_generated', 0.0), 0, 1))
+
+    if model_ai_prob is not None:
+        ai_score = float(np.clip(0.8 * model_ai_prob + 0.2 * heuristic_ai_score, 0, 1))
+    else:
+        ai_score = heuristic_ai_score
+
     forensic_names = [n for n in scores if n not in ('ai_generated',)]
     total_w = sum(w.get(n, 0.0) for n in forensic_names) or 1.0
     forensic_weighted = sum(w.get(n, 0.0) * scores[n] for n in forensic_names) / total_w
 
-    # Same strong-signal boost as the main fusion, so a single confident
-    # specialist (e.g. the CNN or ELA) isn't diluted away here either.
     forensic_strongest = max(scores.get('model', 0.0), scores.get('ela', 0.0))
     forensic_score = max(forensic_weighted, 0.55 * forensic_strongest + 0.45 * forensic_weighted)
     forensic_score = float(np.clip(forensic_score, 0, 1))
@@ -66,25 +72,25 @@ def three_way_breakdown(scores: dict, w: dict) -> dict:
 
 def fuse(detections: list[Detection], model_confidence: float = 0.0,
          model_heatmap: np.ndarray | None = None,
-         weights: dict | None = None) -> Verdict:
+         weights: dict | None = None,
+         model_ai_prob: float | None = None) -> Verdict:
 
     w      = weights or FUSION_WEIGHTS
     scores = {d.detector_name: d.score for d in detections}
     scores['model'] = model_confidence
 
-    # ── Base: weighted average of every signal ──
     weighted = sum(w.get(name, 0.0) * s for name, s in scores.items())
 
-    # ── Strong-signal boost: a single confident specialist shouldn't be diluted
-    # to nothing by the calmer detectors. Only the RELIABLE detectors get to
-    # drive this (copy_move / double_jpeg are too noisy on documents).
     strongest = max(scores.get('ai_generated', 0.0),
                     scores.get('model', 0.0),
                     scores.get('ela', 0.0))
     fused_score = float(np.clip(max(weighted, 0.55 * strongest + 0.45 * weighted), 0, 1))
 
-    # ── Decide a human-readable label ──
     ai = scores.get('ai_generated', 0.0)
+    if model_ai_prob is not None:
+        # The trained classifier can independently justify the AI-GENERATED
+        # label even if the fallback heuristic detector stayed quiet.
+        ai = max(ai, model_ai_prob)
     is_flagged = fused_score >= TAMPER_THRESHOLD
     if is_flagged and ai >= 0.6 and ai >= strongest - 1e-6:
         label = 'AI-GENERATED'
@@ -93,9 +99,8 @@ def fuse(detections: list[Detection], model_confidence: float = 0.0,
     else:
         label = 'AUTHENTIC'
 
-    class_scores = three_way_breakdown(scores, w)
+    class_scores = three_way_breakdown(scores, w, model_ai_prob=model_ai_prob)
 
-    # ── Merge heatmaps (weighted) ──
     heatmaps = [(d.heatmap, w.get(d.detector_name, 0.0))
                 for d in detections if d.heatmap is not None]
     if model_heatmap is not None:

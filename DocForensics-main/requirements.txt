@@ -6,6 +6,8 @@ scikit-image
 scipy
 PyWavelets
 scikit-learn
+matplotlib                    # training-curve / confusion-matrix plots (model/plots.py)
+kagglehub                     # CIFAKE dataset download (ingestion/cifake_loader.py)
 
 # ── Deep learning ──
 # For deployment install the CPU build to keep the image small:

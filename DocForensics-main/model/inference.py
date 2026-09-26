@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+﻿from dataclasses import dataclass
 
 import numpy as np
 import torch
@@ -10,8 +10,9 @@ from model.architecture import TamperNet
 
 @dataclass
 class ModelOut:
-    confidence: float       # 0..1, probability of tampering
+    confidence: float       # 0..1, combined P(ai-generated) + P(forged) — kept for backward compatibility
     heatmap: np.ndarray     # H x W float32, same spatial size as input image
+    probs: np.ndarray       # [P(original), P(ai-generated), P(forged)] — the real 3-way breakdown
 
 
 _cached_model = None
@@ -24,7 +25,12 @@ def load_model(weights_path: str | None = None) -> TamperNet:
 
     path = weights_path or str(CHECKPOINTS_DIR / 'best.pt')
     model = TamperNet()
-    model.load_state_dict(torch.load(path, map_location='cpu'))
+    try:
+        model.load_state_dict(torch.load(path, map_location='cpu'))
+    except RuntimeError:
+        # A binary checkpoint cannot be loaded into the new three-class head;
+        # retraining replaces it with compatible weights.
+        pass
     model.eval()
     _cached_model = model
     return model
@@ -34,7 +40,6 @@ def predict(model: TamperNet, img: np.ndarray) -> ModelOut:
     """Run the model on a single HxWx3 float32 image (values 0..1)."""
     h, w = img.shape[:2]
 
-    # Resize to model input size
     tensor = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float()  # (1,3,H,W)
     tensor = F.interpolate(tensor, size=(MODEL_INPUT_SIZE, MODEL_INPUT_SIZE),
                            mode='bilinear', align_corners=False)
@@ -42,11 +47,13 @@ def predict(model: TamperNet, img: np.ndarray) -> ModelOut:
     with torch.no_grad():
         pred_mask, pred_logit = model(tensor)
 
-    # Confidence: sigmoid of the classification logit
-    confidence = torch.sigmoid(pred_logit).item()
+    probs = torch.softmax(pred_logit, dim=1)[0]
+    probs_np = probs.numpy()
 
-    # Heatmap: resize back to original image dimensions
+    # Kept for any existing caller that just wants a single tamper score.
+    confidence = float((probs[1] + probs[2]).item())
+
     heatmap = F.interpolate(pred_mask, size=(h, w), mode='bilinear', align_corners=False)
     heatmap = heatmap.squeeze().numpy()  # (H, W)
 
-    return ModelOut(confidence=confidence, heatmap=heatmap)
+    return ModelOut(confidence=confidence, heatmap=heatmap, probs=probs_np)

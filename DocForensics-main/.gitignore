@@ -9,8 +9,9 @@ __pycache__/
 htmlcov/
 
 # Training data is regenerated locally — don't commit it
-data/genuine/
-data/tampered/
+data/aigenerated/
+data/forged/
+data/original/
 data/masks/
 test.jpg
 

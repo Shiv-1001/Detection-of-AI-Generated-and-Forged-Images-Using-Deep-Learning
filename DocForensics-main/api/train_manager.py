@@ -7,7 +7,10 @@ skips, 1 classification head) -> checkpoints/best.pt.
 import threading
 import time
 
-from core.config import CHECKPOINTS_DIR, GENUINE_DIR, MAX_EPOCHS, TAMPERED_DIR
+from core.config import (AI_GENERATED_DIR, CHECKPOINTS_DIR, FORGED_DIR,
+                         MAX_EPOCHS, ORIGINAL_DIR)
+
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'}
 
 _lock = threading.Lock()
 _thread: threading.Thread | None = None
@@ -24,8 +27,13 @@ def dataset_counts() -> dict:
     def _count(d):
         if not d.exists():
             return 0
-        return len(list(d.glob('*.jpg'))) + len(list(d.glob('*.png')))
-    return {'genuine': _count(GENUINE_DIR), 'tampered': _count(TAMPERED_DIR)}
+        return sum(1 for path in d.iterdir()
+                   if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS)
+    return {
+        'ai_generated': _count(AI_GENERATED_DIR),
+        'forged': _count(FORGED_DIR),
+        'original': _count(ORIGINAL_DIR),
+    }
 
 
 def has_checkpoint() -> bool:

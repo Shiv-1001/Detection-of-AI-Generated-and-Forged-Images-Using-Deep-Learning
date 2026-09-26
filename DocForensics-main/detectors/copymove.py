@@ -1,17 +1,12 @@
-import cv2
+﻿import cv2
 import numpy as np
+from scipy.spatial import cKDTree
 
 from core.config import CM_BLOCK_SIZE, CM_MATCH_THRESH, CM_STRIDE
 from core.types import BBox, Detection
 from detectors.base import Context, Detector
 
-# A block must carry this much AC (texture) energy to be considered. This drops
-# blank/near-blank regions AND the white document background, whose blocks would
-# otherwise all hash to the same "mostly white" signature and match each other.
 CM_MIN_AC_ENERGY = 40.0
-# A real copy-move leaves many block pairs sharing the SAME shift vector.
-# Repeated text/whitespace in a normal document gives scattered, inconsistent
-# shifts — so we only trust a large cluster of matches with a common offset.
 CM_MIN_CLUSTER = 10
 
 
@@ -26,8 +21,8 @@ def block_hash_features(img: np.ndarray,
             patch = gray[y:y+block, x:x+block]
             dct = cv2.dct(patch)
             sig = dct[:4, :4].copy().flatten()
-            sig[0] = 0.0                          # drop DC (average brightness)
-            if np.linalg.norm(sig) < CM_MIN_AC_ENERGY:   # too little texture
+            sig[0] = 0.0
+            if np.linalg.norm(sig) < CM_MIN_AC_ENERGY:
                 continue
             feats.append((sig, x, y))
     return feats
@@ -35,24 +30,47 @@ def block_hash_features(img: np.ndarray,
 
 def find_shifted_duplicates(feats, block: int,
                             min_distance: int = 48) -> dict[tuple, list[BBox]]:
-    """Group matching block pairs by their (dx, dy) shift vector."""
+    """Group matching block pairs by their (dx, dy) shift vector.
+
+    Uses a KD-tree over the DCT signatures instead of comparing every block
+    against every other block (O(n log n) instead of O(n^2)) — the brute-force
+    version took effectively forever on a full-resolution photo (tens of
+    thousands of blocks -> ~1 billion pairwise comparisons).
+    """
     shifts: dict[tuple, list[BBox]] = {}
     n = len(feats)
-    for i in range(n):
-        sig_i, xi, yi = feats[i]
-        for j in range(i + 1, n):
-            sig_j, xj, yj = feats[j]
-            dx, dy = xj - xi, yj - yi
-            if (dx * dx + dy * dy) ** 0.5 < min_distance:
-                continue
-            denom = np.linalg.norm(sig_i) + np.linalg.norm(sig_j)
-            if denom == 0:
-                continue
-            if 1 - np.linalg.norm(sig_i - sig_j) / denom > CM_MATCH_THRESH:
-                key = (round(dx / 8) * 8, round(dy / 8) * 8)   # quantize shift
-                shifts.setdefault(key, []).extend(
-                    [BBox(xi, yi, block, block), BBox(xj, yj, block, block)]
-                )
+    if n < 2:
+        return shifts
+
+    sigs  = np.stack([f[0] for f in feats])
+    norms = np.linalg.norm(sigs, axis=1)
+    coords = np.array([[f[1], f[2]] for f in feats])
+
+    tree = cKDTree(sigs)
+
+    # Upper-bound radius covering the original relative-similarity threshold:
+    # match requires 1 - |sig_i-sig_j| / (|sig_i|+|sig_j|) > CM_MATCH_THRESH
+    # i.e. |sig_i-sig_j| < (1-CM_MATCH_THRESH) * (|sig_i|+|sig_j|).
+    # Bounding (|sig_i|+|sig_j|) by 2*max(norms) gives a safe (possibly loose)
+    # radius; the exact formula is re-applied below as a precise filter.
+    max_norm = float(norms.max()) if n else 0.0
+    radius = max((1 - CM_MATCH_THRESH) * 2 * max_norm, 1e-6)
+
+    pairs = tree.query_pairs(r=radius, output_type='ndarray')
+    for i, j in pairs:
+        xi, yi = coords[i]
+        xj, yj = coords[j]
+        dx, dy = int(xj - xi), int(yj - yi)
+        if (dx * dx + dy * dy) ** 0.5 < min_distance:
+            continue
+        denom = norms[i] + norms[j]
+        if denom == 0:
+            continue
+        if 1 - np.linalg.norm(sigs[i] - sigs[j]) / denom > CM_MATCH_THRESH:
+            key = (round(dx / 8) * 8, round(dy / 8) * 8)
+            shifts.setdefault(key, []).extend(
+                [BBox(int(xi), int(yi), block, block), BBox(int(xj), int(yj), block, block)]
+            )
     return shifts
 
 
@@ -64,13 +82,9 @@ class CopyMoveDetector(Detector):
             feats  = block_hash_features(img)
             shifts = find_shifted_duplicates(feats, CM_BLOCK_SIZE)
 
-            # The dominant shift vector = the suspected moved patch.
             best_boxes = max(shifts.values(), key=len) if shifts else []
-            cluster    = len(best_boxes) // 2   # boxes come in pairs
+            cluster    = len(best_boxes) // 2
 
-            # Compactness separates a real forgery from repeated text. A moved
-            # patch is a TIGHT cluster of blocks; legitimately-repeated document
-            # text spreads matches across the whole page (low density).
             density = 0.0
             if best_boxes:
                 xs = [b.x for b in best_boxes]; ys = [b.y for b in best_boxes]
@@ -79,10 +93,6 @@ class CopyMoveDetector(Detector):
                 blocks_area = len(best_boxes) * CM_BLOCK_SIZE * CM_BLOCK_SIZE
                 density = float(blocks_area / (bb_area + 1e-6))
 
-            # NOTE: block matching is inherently weak on text documents, where
-            # legitimately-repeated text mimics copy-move. We keep this as a soft,
-            # low-weight hint (see FUSION_WEIGHTS) rather than a hard signal, and
-            # cap the score so a normal page never reads as a confident forgery.
             flagged = cluster >= CM_MIN_CLUSTER and density >= 0.25
             score   = float(np.clip(cluster / 3000.0, 0, 0.6)) if flagged else 0.0
 
