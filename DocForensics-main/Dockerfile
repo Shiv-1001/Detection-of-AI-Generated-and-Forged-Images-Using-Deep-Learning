@@ -21,14 +21,14 @@ ENV PYTHONUNBUFFERED=1 \
 
 # System libs: tesseract for OCR fallback, libs OpenCV-headless / torch need
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        tesseract-ocr \
-        libglib2.0-0 \
-        libgomp1 \
+    tesseract-ocr \
+    libglib2.0-0 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install CPU-only torch first (much smaller than the default CUDA build)
 RUN pip install --no-cache-dir torch torchvision \
-        --index-url https://download.pytorch.org/whl/cpu
+    --index-url https://download.pytorch.org/whl/cpu
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -39,11 +39,8 @@ COPY detectors/ ./detectors/
 COPY fusion/ ./fusion/
 COPY ingestion/ ./ingestion/
 COPY model/ ./model/
-# Hugging Face Spaces can't store binaries in plain git, so the trained model is
-# kept in the public GitHub repo and downloaded here at build time.
-RUN mkdir -p model/checkpoints && \
-    python -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/Suryakarthik-1/docforensics_V2/main/model/checkpoints/best.pt', 'model/checkpoints/best.pt')" && \
-    python -c "import os; assert os.path.getsize('model/checkpoints/best.pt') > 1_000_000, 'model download failed'"
+# The trained checkpoint is committed and copied with model/ above.
+RUN python -c "import os; path = 'model/checkpoints/best.pt'; assert os.path.isfile(path) and os.path.getsize(path) > 1_000_000, f'{path} missing or invalid'"
 COPY synth/ ./synth/
 COPY api/ ./api/
 COPY --from=frontend /app/frontend/dist ./frontend/dist
